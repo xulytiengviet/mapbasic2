@@ -2,27 +2,10 @@
   "use strict";
 
   const cfg = window.VIETFLEX_CONFIG;
-  const errorPanel = document.getElementById("errorPanel");
-  const errorTitle = document.getElementById("errorTitle");
-  const errorMessage = document.getElementById("errorMessage");
-  const modeButtons = [...document.querySelectorAll("[data-map-mode]")];
-
-  let map = null;
-  let protocol = null;
-  let activeModeId = null;
-
-  const archives = new Map();
-
-  function showError(title, message) {
-    if (!errorPanel) return;
-    if (errorTitle) errorTitle.textContent = title || "Không đọc được bản đồ";
-    if (errorMessage) errorMessage.textContent = message || "Không xác định";
-    errorPanel.hidden = false;
-  }
-
-  function hideError() {
-    if (errorPanel) errorPanel.hidden = true;
-  }
+  const protocol = new pmtiles.Protocol({ metadata: true });
+  const maps = {};
+  const archives = {};
+  let syncing = false;
 
   function withTimeout(promise, ms, label) {
     let timer;
@@ -33,60 +16,58 @@
       );
     });
 
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    return Promise.race([promise, timeout])
+      .finally(() => clearTimeout(timer));
   }
 
-  function getMode(id) {
-    return cfg?.modes?.[id] || null;
-  }
-
-  function getArchiveUrl(mode) {
+  function archiveUrl(mode) {
     return `${mode.r2BaseUrl.replace(/\/$/, "")}/${mode.pmtilesObject}`;
   }
 
-  function getArchive(id) {
-    if (archives.has(id)) return archives.get(id);
+  function paneError(id, title, message) {
+    const panel = document.querySelector(`[data-error-for="${id}"]`);
+    if (!panel) return;
 
-    const mode = getMode(id);
-    if (!mode) throw new Error(`Không tồn tại chế độ ${id}`);
+    const titleEl = panel.querySelector(".pane-error-title");
+    const messageEl = panel.querySelector(".pane-error-message");
 
-    const archiveUrl = getArchiveUrl(mode);
-    const archive = new pmtiles.PMTiles(archiveUrl);
+    if (titleEl) titleEl.textContent = title;
+    if (messageEl) messageEl.textContent = message;
+    panel.hidden = false;
+  }
+
+  function clearPaneError(id) {
+    const panel = document.querySelector(`[data-error-for="${id}"]`);
+    if (panel) panel.hidden = true;
+  }
+
+  async function prepareArchive(id, mode) {
+    const url = archiveUrl(mode);
+    const archive = new pmtiles.PMTiles(url);
 
     protocol.add(archive);
 
-    const entry = { archive, archiveUrl, header: null };
-    archives.set(id, entry);
-    return entry;
-  }
+    const header = await withTimeout(
+      archive.getHeader(),
+      cfg.probeTimeoutMs || 8000,
+      mode.pmtilesObject
+    );
 
-  async function probeMode(id) {
-    const mode = getMode(id);
-    const entry = getArchive(id);
-
-    if (!entry.header) {
-      entry.header = await withTimeout(
-        entry.archive.getHeader(),
-        cfg.probeTimeoutMs || 8000,
-        mode.pmtilesObject
-      );
-    }
-
-    if (!entry.header || entry.header.specVersion !== 3) {
+    if (!header || header.specVersion !== 3) {
       throw new Error(`${mode.pmtilesObject} không phải PMTiles v3 hợp lệ.`);
     }
 
-    return entry;
+    archives[id] = { archive, archiveUrl: url, header };
+    return archives[id];
   }
 
-  function styleForMode(id) {
-    const mode = getMode(id);
-    const entry = getArchive(id);
+  function makeStyle(id, mode) {
+    const entry = archives[id];
 
     return {
       version: 8,
       sources: {
-        vietflex: {
+        [id]: {
           type: "raster",
           url: `pmtiles://${entry.archiveUrl}`,
           tileSize: 256,
@@ -97,9 +78,9 @@
       },
       layers: [
         {
-          id: "vietflex-basemap",
+          id: `${id}-raster`,
           type: "raster",
-          source: "vietflex",
+          source: id,
           minzoom: mode.minSourceZoom,
           paint: {
             "raster-opacity": 1,
@@ -111,120 +92,138 @@
     };
   }
 
-  function setButtonsState(id, loading = false) {
-    modeButtons.forEach((button) => {
-      const isActive = button.dataset.mapMode === id;
-      button.classList.toggle("is-active", isActive);
-      button.setAttribute("aria-pressed", isActive ? "true" : "false");
-      button.disabled = loading;
+  function createMap(id, mode) {
+    const map = new maplibregl.Map({
+      container: mode.container,
+      center: cfg.center,
+      zoom: cfg.zoom,
+      bearing: cfg.bearing || 0,
+      pitch: cfg.pitch || 0,
+      minZoom: mode.minSourceZoom,
+      maxZoom: cfg.mapMaxZoom,
+      attributionControl: false,
+      renderWorldCopies: false,
+      style: makeStyle(id, mode)
+    });
+
+    map.addControl(
+      new maplibregl.NavigationControl({ visualizePitch: true }),
+      "top-right"
+    );
+
+    map.on("load", () => {
+      map.resize();
+      clearPaneError(id);
+    });
+
+    map.on("error", (event) => {
+      const message =
+        event?.error?.message || "Không thể tải tile PMTiles.";
+      console.error(`Vietflex ${id}:`, event?.error || event);
+      paneError(id, `Không tải được ${mode.label}`, message);
+    });
+
+    maps[id] = map;
+    return map;
+  }
+
+  function cameraOf(map) {
+    const center = map.getCenter();
+
+    return {
+      center: [center.lng, center.lat],
+      zoom: map.getZoom(),
+      bearing: map.getBearing(),
+      pitch: map.getPitch()
+    };
+  }
+
+  function syncMap(sourceId, targetId) {
+    const source = maps[sourceId];
+    const target = maps[targetId];
+
+    if (!source || !target || syncing) return;
+
+    syncing = true;
+    target.jumpTo(cameraOf(source));
+
+    requestAnimationFrame(() => {
+      syncing = false;
     });
   }
 
-  function writeModeToUrl(id) {
-    const url = new URL(window.location.href);
-    url.searchParams.set("mode", id);
-    history.replaceState(null, "", url);
+  function enableSync() {
+    maps.mapbasic.on("move", () => {
+      syncMap("mapbasic", "mapbasic2");
+    });
+
+    maps.mapbasic2.on("move", () => {
+      syncMap("mapbasic2", "mapbasic");
+    });
   }
 
-  async function switchMode(id, options = {}) {
-    const mode = getMode(id);
-    if (!mode) return;
-
-    if (id === activeModeId && !options.force) return;
-
-    hideError();
-    setButtonsState(id, true);
-
+  async function startPane(id, mode) {
     try {
-      await probeMode(id);
-
-      if (!map) {
-        map = new maplibregl.Map({
-          container: "map",
-          center: cfg.center,
-          zoom: cfg.zoom,
-          minZoom: mode.minSourceZoom,
-          maxZoom: cfg.mapMaxZoom,
-          attributionControl: false,
-          renderWorldCopies: false,
-          style: styleForMode(id)
-        });
-
-        map.addControl(
-          new maplibregl.NavigationControl({ visualizePitch: true }),
-          "top-right"
-        );
-
-        map.addControl(new maplibregl.FullscreenControl(), "top-right");
-
-        map.on("load", () => map.resize());
-
-        map.on("error", (event) => {
-          const message =
-            event?.error?.message || "Không thể tải tile PMTiles.";
-          console.error("Vietflex WebGIS:", event?.error || event);
-          showError("Không tải được bản đồ", message);
-        });
-
-        window.__VIETFLEX_MAP__ = map;
-      } else {
-        map.setMinZoom(mode.minSourceZoom);
-        map.setStyle(styleForMode(id));
-      }
-
-      activeModeId = id;
-      setButtonsState(id, false);
-      writeModeToUrl(id);
-
-      const entry = getArchive(id);
-      window.__VIETFLEX_PMTILES__ = {
-        mode: id,
-        archive: entry.archive,
-        archiveUrl: entry.archiveUrl,
-        header: entry.header
-      };
+      clearPaneError(id);
+      await prepareArchive(id, mode);
+      createMap(id, mode);
+      return true;
     } catch (error) {
       console.error(error);
-      setButtonsState(activeModeId || id, false);
-      showError(
-        `Không đọc được ${mode.pmtilesObject}`,
+      paneError(
+        id,
+        `Không đọc được ${mode.label}`,
         error?.message || String(error)
       );
+      return false;
     }
   }
 
   async function bootstrap() {
     try {
-      if (!cfg?.modes) throw new Error("Thiếu cấu hình nguồn bản đồ.");
-      if (!window.maplibregl) throw new Error("MapLibre GL JS chưa tải được.");
-      if (!window.pmtiles) throw new Error("PMTiles JS chưa tải được.");
+      if (!cfg?.maps) {
+        throw new Error("Thiếu cấu hình hai bản đồ.");
+      }
 
-      protocol = new pmtiles.Protocol({ metadata: true });
+      if (!window.maplibregl) {
+        throw new Error("MapLibre GL JS chưa tải được.");
+      }
+
+      if (!window.pmtiles) {
+        throw new Error("PMTiles JS chưa tải được.");
+      }
+
       maplibregl.addProtocol("pmtiles", protocol.tile);
 
-      modeButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-          switchMode(button.dataset.mapMode);
-        });
+      const [leftOk, rightOk] = await Promise.all([
+        startPane("mapbasic", cfg.maps.mapbasic),
+        startPane("mapbasic2", cfg.maps.mapbasic2)
+      ]);
+
+      if (leftOk && rightOk) {
+        enableSync();
+      }
+
+      window.__VIETFLEX_MAPS__ = maps;
+      window.__VIETFLEX_PMTILES__ = archives;
+
+      window.addEventListener("resize", () => {
+        Object.values(maps).forEach((map) => map.resize());
       });
-
-      const requestedMode =
-        new URLSearchParams(location.search).get("mode");
-
-      const initialMode =
-        getMode(requestedMode) ? requestedMode : cfg.defaultMode;
-
-      await switchMode(initialMode, { force: true });
 
       window.addEventListener("beforeunload", () => {
         maplibregl.removeProtocol("pmtiles");
       });
     } catch (error) {
       console.error(error);
-      showError(
-        "Không khởi tạo được bản đồ",
-        error?.message || String(error)
-      );
+
+      Object.keys(cfg?.maps || {}).forEach((id) => {
+        paneError(
+          id,
+          "Không khởi tạo được bản đồ",
+          error?.message || String(error)
+        );
+      });
     }
   }
 
