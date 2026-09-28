@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Vietflex Map</title>
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.13.0/dist/maplibre-gl.css"
+        crossorigin="anonymous" />
+
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/Vietflexmap/VN@6144d565fcf236727577ab3c4471bbe49f86892f/dist/vietflex.css" />
+
+  <link rel="stylesheet" href="./styles.css?v=1" />
+</head>
+<body>
+  <main id="app">
+    <div id="map" aria-label="Bản đồ Vietflex"></div>
+
+    <a class="vietflex-source"
+       href="https://github.com/Vietflexmap/VN"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="Mã nguồn Vietflex/VN"
+       aria-label="Mã nguồn Vietflex/VN">
+      <span class="vietflex-flag" aria-hidden="true">★</span>
+      <span class="vietflex-name">Vietflex</span>
+    </a>
+
+    <aside id="errorPanel" class="error-panel" hidden role="alert">
+      <strong id="errorTitle">Không đọc được bản đồ</strong>
+      <p id="errorMessage"></p>
+    </aside>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.13.0/dist/maplibre-gl.js"
+          crossorigin="anonymous"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/dist/pmtiles.js"
+          crossorigin="anonymous"></script>
+
+  <script src="./config.js?v=1"></script>
+  <script src="./app.js?v=1"></script>
+</body>
+</html>
