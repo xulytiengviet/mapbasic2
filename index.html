@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#ffffff" />
-  <title>Vietflex Map — Mapbasic × Mapbasic2</title>
+  <title>Vietflex Map — Layers</title>
 
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 
@@ -15,42 +15,69 @@
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/gh/Vietflexmap/VN@6144d565fcf236727577ab3c4471bbe49f86892f/dist/vietflex.css" />
 
-  <link rel="stylesheet" href="./styles.css?v=4" />
+  <link rel="stylesheet" href="./styles.css?v=5" />
 </head>
 <body>
-  <main id="app" class="compare-layout">
+  <main id="app">
+    <div id="map" aria-label="Bản đồ Vietflex"></div>
 
-    <section class="map-pane map-pane-left" aria-label="Mapbasic">
-      <div id="mapbasic" class="map-canvas"></div>
-      <div class="map-label">Mapbasic</div>
+    <section id="layerPanel" class="layer-panel" aria-label="Các lớp bản đồ">
+      <button id="layerPanelToggle"
+              class="layer-panel-toggle"
+              type="button"
+              aria-expanded="true"
+              aria-controls="layerPanelBody">
+        <span>Lớp bản đồ</span>
+        <span class="layer-chevron" aria-hidden="true">⌃</span>
+      </button>
 
-      <aside class="pane-error"
-             data-error-for="mapbasic"
-             hidden
-             role="alert">
-        <strong class="pane-error-title">Không đọc được Mapbasic</strong>
-        <p class="pane-error-message"></p>
-      </aside>
+      <div id="layerPanelBody" class="layer-panel-body">
+
+        <div class="layer-row" data-layer-row="mapbasic2" data-state="idle">
+          <div class="layer-main">
+            <label class="layer-name">
+              <input type="checkbox"
+                     data-layer-toggle="mapbasic2"
+                     checked />
+              <span>Mapbasic2</span>
+            </label>
+            <span class="layer-status">Chưa tải</span>
+          </div>
+
+          <div class="opacity-row">
+            <span>Độ mờ</span>
+            <input type="range"
+                   min="0"
+                   max="100"
+                   value="100"
+                   data-layer-opacity="mapbasic2"
+                   aria-label="Độ trong suốt Mapbasic2" />
+          </div>
+        </div>
+
+        <div class="layer-row" data-layer-row="mapbasic" data-state="idle">
+          <div class="layer-main">
+            <label class="layer-name">
+              <input type="checkbox"
+                     data-layer-toggle="mapbasic" />
+              <span>Mapbasic</span>
+            </label>
+            <span class="layer-status">Chưa tải</span>
+          </div>
+
+          <div class="opacity-row">
+            <span>Độ mờ</span>
+            <input type="range"
+                   min="0"
+                   max="100"
+                   value="70"
+                   data-layer-opacity="mapbasic"
+                   aria-label="Độ trong suốt Mapbasic" />
+          </div>
+        </div>
+
+      </div>
     </section>
-
-    <div class="compare-divider" aria-hidden="true"></div>
-
-    <section class="map-pane map-pane-right" aria-label="Mapbasic2">
-      <div id="mapbasic2" class="map-canvas"></div>
-      <div class="map-label">Mapbasic2</div>
-
-      <aside class="pane-error"
-             data-error-for="mapbasic2"
-             hidden
-             role="alert">
-        <strong class="pane-error-title">Không đọc được Mapbasic2</strong>
-        <p class="pane-error-message"></p>
-      </aside>
-    </section>
-
-    <div class="sync-badge" aria-label="Hai bản đồ đồng bộ">
-      Đồng bộ vị trí · zoom
-    </div>
 
     <a class="vietflex-source"
        href="https://github.com/Vietflexmap/VN"
@@ -61,6 +88,8 @@
       <span class="vietflex-flag" aria-hidden="true">★</span>
       <span class="vietflex-name">Vietflex</span>
     </a>
+
+    <aside id="fatalError" class="fatal-error" hidden role="alert"></aside>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.13.0/dist/maplibre-gl.js"
@@ -69,7 +98,7 @@
   <script src="https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/dist/pmtiles.js"
           crossorigin="anonymous"></script>
 
-  <script src="./config.js?v=4"></script>
-  <script src="./app.js?v=4"></script>
+  <script src="./config.js?v=5"></script>
+  <script src="./app.js?v=5"></script>
 </body>
 </html>
