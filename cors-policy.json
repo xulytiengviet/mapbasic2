@@ -1,6 +1,7 @@
 [
   {
     "AllowedOrigins": [
+      "https://base27-cvnss.github.io",
       "https://xulytiengviet.github.io"
     ],
     "AllowedMethods": [
