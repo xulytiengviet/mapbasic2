@@ -3,12 +3,16 @@
 
   const cfg = window.VIETFLEX_CONFIG;
   const protocol = new pmtiles.Protocol({ metadata: true });
-  const maps = {};
-  const archives = {};
-  let syncing = false;
+  const runtime = new Map();
+  let map = null;
+
+  function archiveUrl(layer) {
+    return `${layer.r2BaseUrl.replace(/\/$/, "")}/${layer.pmtilesObject}`;
+  }
 
   function withTimeout(promise, ms, label) {
     let timer;
+
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(
         () => reject(new Error(`Hết thời gian chờ ${label}`)),
@@ -16,94 +20,259 @@
       );
     });
 
-    return Promise.race([promise, timeout])
-      .finally(() => clearTimeout(timer));
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
   }
 
-  function archiveUrl(mode) {
-    return `${mode.r2BaseUrl.replace(/\/$/, "")}/${mode.pmtilesObject}`;
+  function sourceId(id) {
+    return `pmtiles-source-${id}`;
   }
 
-  function paneError(id, title, message) {
-    const panel = document.querySelector(`[data-error-for="${id}"]`);
-    if (!panel) return;
-
-    const titleEl = panel.querySelector(".pane-error-title");
-    const messageEl = panel.querySelector(".pane-error-message");
-
-    if (titleEl) titleEl.textContent = title;
-    if (messageEl) messageEl.textContent = message;
-    panel.hidden = false;
+  function layerId(id) {
+    return `pmtiles-layer-${id}`;
   }
 
-  function clearPaneError(id) {
-    const panel = document.querySelector(`[data-error-for="${id}"]`);
-    if (panel) panel.hidden = true;
+  function layerRow(id) {
+    return document.querySelector(`[data-layer-row="${id}"]`);
   }
 
-  async function prepareArchive(id, mode) {
-    const url = archiveUrl(mode);
-    const archive = new pmtiles.PMTiles(url);
+  function setStatus(id, state, message = "") {
+    const row = layerRow(id);
+    if (!row) return;
 
-    protocol.add(archive);
+    row.dataset.state = state;
 
-    const header = await withTimeout(
-      archive.getHeader(),
-      cfg.probeTimeoutMs || 8000,
-      mode.pmtilesObject
-    );
+    const status = row.querySelector(".layer-status");
+    if (!status) return;
 
-    if (!header || header.specVersion !== 3) {
-      throw new Error(`${mode.pmtilesObject} không phải PMTiles v3 hợp lệ.`);
+    const text = {
+      idle: "Chưa tải",
+      loading: "Đang tải…",
+      ready: "Sẵn sàng",
+      error: "Lỗi nguồn"
+    }[state] || "";
+
+    status.textContent = message || text;
+    status.title = message || text;
+  }
+
+  function checkboxFor(id) {
+    return document.querySelector(`[data-layer-toggle="${id}"]`);
+  }
+
+  function opacityFor(id) {
+    return document.querySelector(`[data-layer-opacity="${id}"]`);
+  }
+
+  function setControlsDisabled(id, disabled) {
+    const checkbox = checkboxFor(id);
+    const opacity = opacityFor(id);
+
+    if (checkbox) checkbox.disabled = disabled;
+    if (opacity) opacity.disabled = disabled;
+  }
+
+  function friendlyError(id, error) {
+    const message = error?.message || String(error);
+
+    if (/failed to fetch/i.test(message)) {
+      if (id === "mapbasic") {
+        return "R2 Mapbasic đang chặn origin xulytiengviet.github.io (CORS).";
+      }
+
+      return "Không thể kết nối nguồn R2. Kiểm tra CORS và URL object.";
     }
 
-    archives[id] = { archive, archiveUrl: url, header };
-    return archives[id];
+    if (/404|bad response code/i.test(message)) {
+      return "Không tìm thấy object PMTiles trên R2.";
+    }
+
+    return message;
   }
 
-  function makeStyle(id, mode) {
-    const entry = archives[id];
+  async function ensureLayer(id) {
+    if (runtime.has(id)) return runtime.get(id);
 
-    return {
-      version: 8,
-      sources: {
-        [id]: {
+    const def = cfg.layers[id];
+    if (!def) throw new Error(`Không có cấu hình lớp ${id}`);
+
+    setStatus(id, "loading");
+    setControlsDisabled(id, true);
+
+    try {
+      const url = archiveUrl(def);
+      const archive = new pmtiles.PMTiles(url);
+
+      protocol.add(archive);
+
+      const header = await withTimeout(
+        archive.getHeader(),
+        cfg.probeTimeoutMs || 8000,
+        def.pmtilesObject
+      );
+
+      if (!header || header.specVersion !== 3) {
+        throw new Error("Archive không phải PMTiles v3 hợp lệ.");
+      }
+
+      const minzoom = Number.isFinite(header.minZoom)
+        ? header.minZoom
+        : cfg.map.minZoom;
+
+      const maxzoom = Number.isFinite(header.maxZoom)
+        ? header.maxZoom
+        : cfg.map.maxZoom;
+
+      if (!map.getSource(sourceId(id))) {
+        map.addSource(sourceId(id), {
           type: "raster",
-          url: `pmtiles://${entry.archiveUrl}`,
+          url: `pmtiles://${url}`,
           tileSize: 256,
-          minzoom: mode.minSourceZoom,
-          maxzoom: mode.maxSourceZoom,
-          attribution: mode.attribution
-        }
-      },
-      layers: [
-        {
-          id: `${id}-raster`,
-          type: "raster",
-          source: id,
-          minzoom: mode.minSourceZoom,
-          paint: {
-            "raster-opacity": 1,
-            "raster-fade-duration": 0,
-            "raster-resampling": "linear"
-          }
-        }
-      ]
-    };
+          minzoom,
+          maxzoom,
+          attribution: def.attribution || def.label
+        });
+      }
+
+      if (!map.getLayer(layerId(id))) {
+        const beforeId = findBeforeLayer(def.order);
+
+        map.addLayer(
+          {
+            id: layerId(id),
+            type: "raster",
+            source: sourceId(id),
+            minzoom,
+            paint: {
+              "raster-opacity": def.opacity ?? 1,
+              "raster-fade-duration": 0,
+              "raster-resampling": "linear"
+            },
+            layout: {
+              visibility: def.visible ? "visible" : "none"
+            }
+          },
+          beforeId
+        );
+      }
+
+      const entry = { id, def, url, archive, header };
+      runtime.set(id, entry);
+
+      setStatus(id, "ready");
+      setControlsDisabled(id, false);
+
+      return entry;
+    } catch (error) {
+      console.error(`Vietflex layer ${id}:`, error);
+
+      setStatus(id, "error", friendlyError(id, error));
+      setControlsDisabled(id, false);
+
+      const checkbox = checkboxFor(id);
+      if (checkbox) checkbox.checked = false;
+
+      throw error;
+    }
   }
 
-  function createMap(id, mode) {
-    const map = new maplibregl.Map({
-      container: mode.container,
-      center: cfg.center,
-      zoom: cfg.zoom,
-      bearing: cfg.bearing || 0,
-      pitch: cfg.pitch || 0,
-      minZoom: mode.minSourceZoom,
-      maxZoom: cfg.mapMaxZoom,
+  function findBeforeLayer(order) {
+    const candidates = Object.entries(cfg.layers)
+      .filter(([, def]) => def.order > order)
+      .sort((a, b) => a[1].order - b[1].order);
+
+    for (const [id] of candidates) {
+      if (map.getLayer(layerId(id))) {
+        return layerId(id);
+      }
+    }
+
+    return undefined;
+  }
+
+  async function setLayerVisible(id, visible) {
+    try {
+      if (visible) {
+        await ensureLayer(id);
+      }
+
+      if (map.getLayer(layerId(id))) {
+        map.setLayoutProperty(
+          layerId(id),
+          "visibility",
+          visible ? "visible" : "none"
+        );
+      }
+    } catch {
+      // Trạng thái lỗi đã được cập nhật trong ensureLayer.
+    }
+  }
+
+  function setLayerOpacity(id, value) {
+    if (!map.getLayer(layerId(id))) return;
+
+    map.setPaintProperty(
+      layerId(id),
+      "raster-opacity",
+      Math.max(0, Math.min(1, Number(value)))
+    );
+  }
+
+  function bindLayerPanel() {
+    document.querySelectorAll("[data-layer-toggle]").forEach((input) => {
+      const id = input.dataset.layerToggle;
+
+      input.addEventListener("change", async () => {
+        await setLayerVisible(id, input.checked);
+      });
+    });
+
+    document.querySelectorAll("[data-layer-opacity]").forEach((input) => {
+      const id = input.dataset.layerOpacity;
+
+      input.addEventListener("input", () => {
+        setLayerOpacity(id, Number(input.value) / 100);
+      });
+    });
+
+    const panel = document.getElementById("layerPanel");
+    const button = document.getElementById("layerPanelToggle");
+
+    button?.addEventListener("click", () => {
+      const collapsed = panel.classList.toggle("is-collapsed");
+      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    });
+  }
+
+  async function bootstrap() {
+    if (!cfg?.layers || !cfg?.map) {
+      throw new Error("Thiếu cấu hình bản đồ/lớp.");
+    }
+
+    if (!window.maplibregl) {
+      throw new Error("MapLibre GL JS chưa tải được.");
+    }
+
+    if (!window.pmtiles) {
+      throw new Error("PMTiles JS chưa tải được.");
+    }
+
+    maplibregl.addProtocol("pmtiles", protocol.tile);
+
+    map = new maplibregl.Map({
+      container: "map",
+      center: cfg.map.center,
+      zoom: cfg.map.zoom,
+      minZoom: cfg.map.minZoom,
+      maxZoom: cfg.map.maxZoom,
+      bearing: cfg.map.bearing || 0,
+      pitch: cfg.map.pitch || 0,
+      renderWorldCopies: cfg.map.renderWorldCopies ?? false,
       attributionControl: false,
-      renderWorldCopies: false,
-      style: makeStyle(id, mode)
+      style: {
+        version: 8,
+        sources: {},
+        layers: []
+      }
     });
 
     map.addControl(
@@ -111,121 +280,51 @@
       "top-right"
     );
 
-    map.on("load", () => {
+    map.addControl(new maplibregl.FullscreenControl(), "top-right");
+
+    bindLayerPanel();
+
+    map.on("load", async () => {
+      const ordered = Object.entries(cfg.layers)
+        .sort((a, b) => a[1].order - b[1].order);
+
+      for (const [id, def] of ordered) {
+        const checkbox = checkboxFor(id);
+        const opacity = opacityFor(id);
+
+        if (checkbox) checkbox.checked = Boolean(def.visible);
+        if (opacity) opacity.value = Math.round((def.opacity ?? 1) * 100);
+
+        setStatus(id, "idle");
+
+        if (def.visible) {
+          await setLayerVisible(id, true);
+        }
+      }
+
       map.resize();
-      clearPaneError(id);
     });
 
     map.on("error", (event) => {
-      const message =
-        event?.error?.message || "Không thể tải tile PMTiles.";
-      console.error(`Vietflex ${id}:`, event?.error || event);
-      paneError(id, `Không tải được ${mode.label}`, message);
+      const error = event?.error;
+      if (error) console.error("Vietflex MapLibre:", error);
     });
 
-    maps[id] = map;
-    return map;
-  }
+    window.__VIETFLEX_MAP__ = map;
+    window.__VIETFLEX_LAYERS__ = runtime;
 
-  function cameraOf(map) {
-    const center = map.getCenter();
-
-    return {
-      center: [center.lng, center.lat],
-      zoom: map.getZoom(),
-      bearing: map.getBearing(),
-      pitch: map.getPitch()
-    };
-  }
-
-  function syncMap(sourceId, targetId) {
-    const source = maps[sourceId];
-    const target = maps[targetId];
-
-    if (!source || !target || syncing) return;
-
-    syncing = true;
-    target.jumpTo(cameraOf(source));
-
-    requestAnimationFrame(() => {
-      syncing = false;
+    window.addEventListener("beforeunload", () => {
+      maplibregl.removeProtocol("pmtiles");
     });
   }
 
-  function enableSync() {
-    maps.mapbasic.on("move", () => {
-      syncMap("mapbasic", "mapbasic2");
-    });
+  bootstrap().catch((error) => {
+    console.error(error);
 
-    maps.mapbasic2.on("move", () => {
-      syncMap("mapbasic2", "mapbasic");
-    });
-  }
-
-  async function startPane(id, mode) {
-    try {
-      clearPaneError(id);
-      await prepareArchive(id, mode);
-      createMap(id, mode);
-      return true;
-    } catch (error) {
-      console.error(error);
-      paneError(
-        id,
-        `Không đọc được ${mode.label}`,
-        error?.message || String(error)
-      );
-      return false;
+    const fatal = document.getElementById("fatalError");
+    if (fatal) {
+      fatal.hidden = false;
+      fatal.textContent = error?.message || String(error);
     }
-  }
-
-  async function bootstrap() {
-    try {
-      if (!cfg?.maps) {
-        throw new Error("Thiếu cấu hình hai bản đồ.");
-      }
-
-      if (!window.maplibregl) {
-        throw new Error("MapLibre GL JS chưa tải được.");
-      }
-
-      if (!window.pmtiles) {
-        throw new Error("PMTiles JS chưa tải được.");
-      }
-
-      maplibregl.addProtocol("pmtiles", protocol.tile);
-
-      const [leftOk, rightOk] = await Promise.all([
-        startPane("mapbasic", cfg.maps.mapbasic),
-        startPane("mapbasic2", cfg.maps.mapbasic2)
-      ]);
-
-      if (leftOk && rightOk) {
-        enableSync();
-      }
-
-      window.__VIETFLEX_MAPS__ = maps;
-      window.__VIETFLEX_PMTILES__ = archives;
-
-      window.addEventListener("resize", () => {
-        Object.values(maps).forEach((map) => map.resize());
-      });
-
-      window.addEventListener("beforeunload", () => {
-        maplibregl.removeProtocol("pmtiles");
-      });
-    } catch (error) {
-      console.error(error);
-
-      Object.keys(cfg?.maps || {}).forEach((id) => {
-        paneError(
-          id,
-          "Không khởi tạo được bản đồ",
-          error?.message || String(error)
-        );
-      });
-    }
-  }
-
-  bootstrap();
+  });
 })();
