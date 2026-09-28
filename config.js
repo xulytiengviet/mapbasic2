@@ -12,7 +12,7 @@ window.VIETFLEX_CONFIG = Object.freeze({
 
     mapbasic: Object.freeze({
       label: "Mapbasic",
-      r2BaseUrl: "https://pub-40df081e07ea4052aeb0ac2c33ae3fb4.r2.dev",
+      r2BaseUrl: "https://pub-455588dd8bc84c5bab992d0db75a3a93.r2.dev",
       pmtilesObject: "vietnam_biendong_webgis.pmtiles",
       visible: false,
       opacity: 0.7,
