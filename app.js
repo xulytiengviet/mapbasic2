@@ -7,7 +7,14 @@
   let map = null;
 
   function archiveUrl(layer) {
-    return `${layer.r2BaseUrl.replace(/\/$/, "")}/${layer.pmtilesObject}`;
+    const base = cfg.storage.r2BaseUrl.replace(/\/$/, "") + "/";
+    const url = new URL(layer.pmtilesObject, base);
+
+    if (cfg.storage.dataVersion) {
+      url.searchParams.set("v", cfg.storage.dataVersion);
+    }
+
+    return url.href;
   }
 
   function withTimeout(promise, ms, label) {
@@ -154,7 +161,7 @@
       const entry = { id, def, url, archive, header };
       runtime.set(id, entry);
 
-      setStatus(id, "ready");
+      setStatus(id, "ready", `Sẵn sàng · Z${minzoom}–Z${maxzoom}`);
       setControlsDisabled(id, false);
 
       return entry;
@@ -240,8 +247,8 @@
   }
 
   async function bootstrap() {
-    if (!cfg?.layers || !cfg?.map) {
-      throw new Error("Thiếu cấu hình bản đồ/lớp.");
+    if (!cfg?.storage?.r2BaseUrl || !cfg?.layers || !cfg?.map) {
+      throw new Error("Thiếu cấu hình R2, bản đồ hoặc lớp.");
     }
 
     if (!window.maplibregl) {
@@ -308,6 +315,7 @@
 
     window.__VIETFLEX_MAP__ = map;
     window.__VIETFLEX_LAYERS__ = runtime;
+    window.__VIETFLEX_STORAGE__ = cfg.storage;
 
     window.addEventListener("beforeunload", () => {
       maplibregl.removeProtocol("pmtiles");
