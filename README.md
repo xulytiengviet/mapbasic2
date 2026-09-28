@@ -1,26 +1,36 @@
 # Vietflex Basemap — mapbasic2
 
-Static WebGIS dùng MapLibre GL JS + PMTiles, chạy trên GitHub Pages và đọc PMTiles trực tiếp từ Cloudflare R2 bằng HTTP Range Request.
+WebGIS một khung bản đồ, quản lý nhiều nguồn PMTiles theo lớp (layer) bằng MapLibre GL JS.
 
-## R2
+## Các lớp
 
-- Base URL: `https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev`
+### Mapbasic2
+- R2: `https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev`
 - Object: `basemap.pmtiles`
-- Public PMTiles URL: `https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev/basemap.pmtiles`
-- GitHub Pages: `https://xulytiengviet.github.io/mapbasic2/`
+- Mặc định: bật, opacity 100%
 
-Nếu object trên R2 đổi tên, chỉ sửa `pmtilesObject` trong `config.js`.
+### Mapbasic
+- R2: `https://pub-40df081e07ea4052aeb0ac2c33ae3fb4.r2.dev`
+- Object: `vietnam_biendong_webgis.pmtiles`
+- Mặc định: tắt, tải theo yêu cầu khi người dùng bật layer
 
-## CORS Policy
+## CORS bắt buộc cho Mapbasic
 
-Dán nội dung `cors-policy.json` vào Cloudflare Dashboard → R2 → bucket `mapbasic2` → Settings → CORS Policy.
+Nếu Mapbasic báo `Failed to fetch`, code frontend không thể vượt qua CORS của trình duyệt.
 
-Origin phải là `https://xulytiengviet.github.io`, không thêm `/mapbasic2/`.
+Trên bucket R2 chứa `vietnam_biendong_webgis.pmtiles`, đặt CORS bằng nội dung `cors-policy.json`.
+
+Hai origin cần được cho phép:
+
+- `https://base27-cvnss.github.io`
+- `https://xulytiengviet.github.io`
+
+Không thêm đường dẫn `/mapbase/` hoặc `/mapbasic2/` vào Origin.
 
 ## GitHub Pages
 
-Settings → Pages → Deploy from a branch → `main` → `/ (root)`.
+Trang:
 
-## Kiểm tra
+`https://xulytiengviet.github.io/mapbasic2/`
 
-Mở DevTools → Network. Request tới `basemap.pmtiles` phải tải được; các request byte-range thường trả `206 Partial Content`.
+Mở DevTools → Network để kiểm tra request PMTiles. Byte-range hợp lệ thường trả `206 Partial Content`.
