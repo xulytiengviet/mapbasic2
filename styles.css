@@ -16,6 +16,45 @@ body { overflow: hidden; }
   background: #dbe6ee;
 }
 
+.mode-switcher {
+  position: absolute;
+  z-index: 15;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid rgba(23, 50, 77, 0.13);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 3px 14px rgba(15, 35, 55, 0.14);
+  backdrop-filter: blur(8px);
+}
+
+.mode-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: transparent;
+  color: #17324d;
+  font: 600 12px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.mode-button:hover {
+  background: rgba(23, 50, 77, 0.07);
+}
+
+.mode-button.is-active {
+  background: #17324d;
+  color: #fff;
+}
+
+.mode-button:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
 .vietflex-source {
   position: absolute;
   z-index: 12;
@@ -79,3 +118,20 @@ body { overflow: hidden; }
 }
 
 .error-panel p { margin: 4px 0 0; }
+
+@media (max-width: 640px) {
+  .mode-switcher {
+    top: 6px;
+    left: 6px;
+  }
+
+  .mode-button {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .maplibregl-ctrl-top-right {
+    top: 6px;
+    right: 6px;
+  }
+}
