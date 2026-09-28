@@ -75,11 +75,7 @@
     const message = error?.message || String(error);
 
     if (/failed to fetch/i.test(message)) {
-      if (id === "mapbasic") {
-        return "R2 Mapbasic đang chặn origin xulytiengviet.github.io (CORS).";
-      }
-
-      return "Không thể kết nối nguồn R2. Kiểm tra CORS và URL object.";
+      return "Không thể kết nối nguồn PMTiles. Kiểm tra Public Access, CORS, URL object và HTTP Range.";
     }
 
     if (/404|bad response code/i.test(message)) {
