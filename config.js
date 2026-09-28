@@ -1,8 +1,12 @@
 window.VIETFLEX_CONFIG = Object.freeze({
+  storage: Object.freeze({
+    r2BaseUrl: "https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev",
+    dataVersion: "2026-09-28-2"
+  }),
+
   layers: Object.freeze({
     mapbasic2: Object.freeze({
       label: "Mapbasic2",
-      r2BaseUrl: "https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev",
       pmtilesObject: "basemap.pmtiles",
       visible: true,
       opacity: 1,
@@ -12,7 +16,6 @@ window.VIETFLEX_CONFIG = Object.freeze({
 
     mapbasic: Object.freeze({
       label: "Mapbasic",
-      r2BaseUrl: "https://pub-455588dd8bc84c5bab992d0db75a3a93.r2.dev",
       pmtilesObject: "vietnam_biendong_webgis.pmtiles",
       visible: false,
       opacity: 0.7,
@@ -31,5 +34,5 @@ window.VIETFLEX_CONFIG = Object.freeze({
     renderWorldCopies: false
   }),
 
-  probeTimeoutMs: 8000
+  probeTimeoutMs: 10000
 });
