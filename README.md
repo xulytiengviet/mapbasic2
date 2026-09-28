@@ -1,31 +1,50 @@
 # Vietflex Basemap — mapbasic2
 
-WebGIS một khung bản đồ, quản lý nhiều nguồn PMTiles theo lớp (layer) bằng MapLibre GL JS.
+WebGIS một khung bản đồ, quản lý hai PMTiles như các layer độc lập bằng MapLibre GL JS + PMTiles.
 
-## Các lớp
+## Storage hiện tại
+
+Cả hai PMTiles nằm chung bucket Cloudflare R2 `mapbasic2` và dùng cùng public endpoint:
+
+`https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev`
+
+Các object:
+
+- `basemap.pmtiles`
+- `vietnam_biendong_webgis.pmtiles`
+
+## Các layer
 
 ### Mapbasic2
-- R2: `https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev`
 - Object: `basemap.pmtiles`
-- Mặc định: bật, opacity 100%
+- Mặc định: bật
+- Opacity mặc định: 100%
 
 ### Mapbasic
-- R2: `https://pub-455588dd8bc84c5bab992d0db75a3a93.r2.dev`
 - Object: `vietnam_biendong_webgis.pmtiles`
-- Mặc định: tắt, tải theo yêu cầu khi người dùng bật layer
+- Mặc định: tắt
+- Opacity mặc định: 70%
+- Khi bật, layer được tải theo yêu cầu
 
-## CORS bắt buộc cho Mapbasic
+## Cache/version
 
-Nếu Mapbasic báo `Failed to fetch`, code frontend không thể vượt qua CORS của trình duyệt.
+Vì hai PMTiles đã được cập nhật nhưng vẫn giữ nguyên tên object, `config.js` dùng:
 
-Trên bucket R2 chứa `vietnam_biendong_webgis.pmtiles`, đặt CORS bằng nội dung `cors-policy.json`.
+`dataVersion: "2026-09-28-2"`
 
-Hai origin cần được cho phép:
+Ứng dụng thêm query version vào URL PMTiles để trình duyệt không trộn byte-range cache của phiên bản cũ với phiên bản mới.
 
-- `https://base27-cvnss.github.io`
+Khi thay PMTiles lần sau nhưng vẫn giữ nguyên tên file, chỉ cần tăng `dataVersion`.
+
+## CORS
+
+Bucket `mapbasic2` cần cho phép origin GitHub Pages:
+
 - `https://xulytiengviet.github.io`
 
-Không thêm đường dẫn `/mapbase/` hoặc `/mapbasic2/` vào Origin.
+Có thể giữ thêm `https://base27-cvnss.github.io` nếu muốn trang Base27 truy cập cùng bucket.
+
+Policy mẫu nằm trong `cors-policy.json`.
 
 ## GitHub Pages
 
@@ -33,4 +52,4 @@ Trang:
 
 `https://xulytiengviet.github.io/mapbasic2/`
 
-Mở DevTools → Network để kiểm tra request PMTiles. Byte-range hợp lệ thường trả `206 Partial Content`.
+Sau khi deploy, mở DevTools → Network và kiểm tra các request `.pmtiles?v=...`. Request byte-range hợp lệ thường trả `206 Partial Content`.
