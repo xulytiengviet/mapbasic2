@@ -10,7 +10,7 @@ WebGIS một khung bản đồ, quản lý nhiều nguồn PMTiles theo lớp (l
 - Mặc định: bật, opacity 100%
 
 ### Mapbasic
-- R2: `https://pub-40df081e07ea4052aeb0ac2c33ae3fb4.r2.dev`
+- R2: `https://pub-455588dd8bc84c5bab992d0db75a3a93.r2.dev`
 - Object: `vietnam_biendong_webgis.pmtiles`
 - Mặc định: tắt, tải theo yêu cầu khi người dùng bật layer
 
