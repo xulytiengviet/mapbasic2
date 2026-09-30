@@ -6,6 +6,8 @@
   const runtime = new Map();
   let map = null;
 
+  const TILE_TYPE_MVT = 1;
+
   function archiveUrl(layer) {
     const base = cfg.storage.r2BaseUrl.replace(/\/$/, "") + "/";
     const url = new URL(layer.pmtilesObject, base);
@@ -36,6 +38,37 @@
 
   function layerId(id) {
     return `pmtiles-layer-${id}`;
+  }
+
+  function safeId(value) {
+    return String(value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "layer";
+  }
+
+  function vectorLayerNames(metadata) {
+    let layers = metadata?.vector_layers;
+
+    if (!Array.isArray(layers) && metadata?.json) {
+      try {
+        const parsed = typeof metadata.json === "string"
+          ? JSON.parse(metadata.json)
+          : metadata.json;
+        layers = parsed?.vector_layers;
+      } catch (error) {
+        console.warn("Không đọc được metadata.json của vector tiles:", error);
+      }
+    }
+
+    if (!Array.isArray(layers)) return [];
+
+    return [...new Set(
+      layers
+        .map((item) => typeof item === "string" ? item : item?.id)
+        .filter((name) => typeof name === "string" && name.trim())
+    )];
   }
 
   function layerRow(id) {
@@ -92,6 +125,151 @@
     return message;
   }
 
+  function firstMapLayerFor(id) {
+    const entry = runtime.get(id);
+    if (entry?.mapLayerIds?.length) {
+      return entry.mapLayerIds[0];
+    }
+
+    const fallback = layerId(id);
+    return map.getLayer(fallback) ? fallback : undefined;
+  }
+
+  function findBeforeLayer(order) {
+    const candidates = Object.entries(cfg.layers)
+      .filter(([, def]) => def.order > order)
+      .sort((a, b) => a[1].order - b[1].order);
+
+    for (const [id] of candidates) {
+      const candidateId = firstMapLayerFor(id);
+      if (candidateId && map.getLayer(candidateId)) {
+        return candidateId;
+      }
+    }
+
+    return undefined;
+  }
+
+  function addRasterLayer(id, def, url, minzoom, maxzoom) {
+    const mapLayerIds = [];
+
+    if (!map.getSource(sourceId(id))) {
+      map.addSource(sourceId(id), {
+        type: "raster",
+        url: `pmtiles://${url}`,
+        tileSize: 256,
+        minzoom,
+        maxzoom,
+        attribution: def.attribution || def.label
+      });
+    }
+
+    if (!map.getLayer(layerId(id))) {
+      const beforeId = findBeforeLayer(def.order);
+
+      map.addLayer(
+        {
+          id: layerId(id),
+          type: "raster",
+          source: sourceId(id),
+          minzoom,
+          paint: {
+            "raster-opacity": def.opacity ?? 1,
+            "raster-fade-duration": 0,
+            "raster-resampling": "linear"
+          },
+          layout: {
+            visibility: def.visible ? "visible" : "none"
+          }
+        },
+        beforeId
+      );
+    }
+
+    mapLayerIds.push(layerId(id));
+    return mapLayerIds;
+  }
+
+  function addVectorLayer(id, def, url, minzoom, maxzoom, sourceLayers) {
+    const mapLayerIds = [];
+    const beforeId = findBeforeLayer(def.order);
+    const opacity = def.opacity ?? 1;
+
+    if (!map.getSource(sourceId(id))) {
+      map.addSource(sourceId(id), {
+        type: "vector",
+        url: `pmtiles://${url}`,
+        minzoom,
+        maxzoom,
+        attribution: def.attribution || def.label
+      });
+    }
+
+    sourceLayers.forEach((sourceLayer, index) => {
+      const suffix = `${index}-${safeId(sourceLayer)}`;
+      const fillId = `${layerId(id)}-fill-${suffix}`;
+      const lineId = `${layerId(id)}-line-${suffix}`;
+      const pointId = `${layerId(id)}-point-${suffix}`;
+
+      if (!map.getLayer(fillId)) {
+        map.addLayer({
+          id: fillId,
+          type: "fill",
+          source: sourceId(id),
+          "source-layer": sourceLayer,
+          minzoom,
+          layout: { visibility: def.visible ? "visible" : "none" },
+          filter: ["==", ["geometry-type"], "Polygon"],
+          paint: {
+            "fill-color": "#4f8fd8",
+            "fill-opacity": Math.min(0.22, opacity * 0.22),
+            "fill-outline-color": "#155aa8"
+          }
+        }, beforeId);
+      }
+
+      if (!map.getLayer(lineId)) {
+        map.addLayer({
+          id: lineId,
+          type: "line",
+          source: sourceId(id),
+          "source-layer": sourceLayer,
+          minzoom,
+          layout: { visibility: def.visible ? "visible" : "none" },
+          filter: ["==", ["geometry-type"], "LineString"],
+          paint: {
+            "line-color": "#155aa8",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.7, 8, 1.4, 14, 2.2],
+            "line-opacity": opacity
+          }
+        }, beforeId);
+      }
+
+      if (!map.getLayer(pointId)) {
+        map.addLayer({
+          id: pointId,
+          type: "circle",
+          source: sourceId(id),
+          "source-layer": sourceLayer,
+          minzoom,
+          layout: { visibility: def.visible ? "visible" : "none" },
+          filter: ["==", ["geometry-type"], "Point"],
+          paint: {
+            "circle-color": "#155aa8",
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 2, 12, 5],
+            "circle-opacity": opacity,
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 1
+          }
+        }, beforeId);
+      }
+
+      mapLayerIds.push(fillId, lineId, pointId);
+    });
+
+    return mapLayerIds;
+  }
+
   async function ensureLayer(id) {
     if (runtime.has(id)) return runtime.get(id);
 
@@ -125,43 +303,51 @@
         ? header.maxZoom
         : cfg.map.maxZoom;
 
-      if (!map.getSource(sourceId(id))) {
-        map.addSource(sourceId(id), {
-          type: "raster",
-          url: `pmtiles://${url}`,
-          tileSize: 256,
+      const isVector = header.tileType === TILE_TYPE_MVT;
+      let metadata = null;
+      let sourceLayers = [];
+      let mapLayerIds = [];
+
+      if (isVector) {
+        metadata = await withTimeout(
+          archive.getMetadata(),
+          cfg.probeTimeoutMs || 8000,
+          `${def.pmtilesObject} metadata`
+        );
+
+        sourceLayers = vectorLayerNames(metadata);
+
+        if (!sourceLayers.length) {
+          throw new Error("PMTiles là MVT nhưng metadata không có vector_layers/source-layer để hiển thị.");
+        }
+
+        mapLayerIds = addVectorLayer(
+          id,
+          def,
+          url,
           minzoom,
           maxzoom,
-          attribution: def.attribution || def.label
-        });
-      }
-
-      if (!map.getLayer(layerId(id))) {
-        const beforeId = findBeforeLayer(def.order);
-
-        map.addLayer(
-          {
-            id: layerId(id),
-            type: "raster",
-            source: sourceId(id),
-            minzoom,
-            paint: {
-              "raster-opacity": def.opacity ?? 1,
-              "raster-fade-duration": 0,
-              "raster-resampling": "linear"
-            },
-            layout: {
-              visibility: def.visible ? "visible" : "none"
-            }
-          },
-          beforeId
+          sourceLayers
         );
+      } else {
+        mapLayerIds = addRasterLayer(id, def, url, minzoom, maxzoom);
       }
 
-      const entry = { id, def, url, archive, header };
+      const entry = {
+        id,
+        def,
+        url,
+        archive,
+        header,
+        metadata,
+        sourceLayers,
+        sourceType: isVector ? "vector" : "raster",
+        mapLayerIds
+      };
       runtime.set(id, entry);
 
-      setStatus(id, "ready", `Sẵn sàng · Z${minzoom}–Z${maxzoom}`);
+      const typeLabel = isVector ? `MVT · ${sourceLayers.length} lớp` : "Raster";
+      setStatus(id, "ready", `Sẵn sàng · ${typeLabel} · Z${minzoom}–Z${maxzoom}`);
       setControlsDisabled(id, false);
 
       return entry;
@@ -178,46 +364,45 @@
     }
   }
 
-  function findBeforeLayer(order) {
-    const candidates = Object.entries(cfg.layers)
-      .filter(([, def]) => def.order > order)
-      .sort((a, b) => a[1].order - b[1].order);
-
-    for (const [id] of candidates) {
-      if (map.getLayer(layerId(id))) {
-        return layerId(id);
-      }
-    }
-
-    return undefined;
-  }
-
   async function setLayerVisible(id, visible) {
     try {
-      if (visible) {
-        await ensureLayer(id);
-      }
+      const entry = visible ? await ensureLayer(id) : runtime.get(id);
+      if (!entry) return;
 
-      if (map.getLayer(layerId(id))) {
-        map.setLayoutProperty(
-          layerId(id),
-          "visibility",
-          visible ? "visible" : "none"
-        );
-      }
+      entry.mapLayerIds.forEach((mapLayerId) => {
+        if (map.getLayer(mapLayerId)) {
+          map.setLayoutProperty(
+            mapLayerId,
+            "visibility",
+            visible ? "visible" : "none"
+          );
+        }
+      });
     } catch {
       // Trạng thái lỗi đã được cập nhật trong ensureLayer.
     }
   }
 
   function setLayerOpacity(id, value) {
-    if (!map.getLayer(layerId(id))) return;
+    const entry = runtime.get(id);
+    if (!entry) return;
 
-    map.setPaintProperty(
-      layerId(id),
-      "raster-opacity",
-      Math.max(0, Math.min(1, Number(value)))
-    );
+    const opacity = Math.max(0, Math.min(1, Number(value)));
+
+    entry.mapLayerIds.forEach((mapLayerId) => {
+      const layer = map.getLayer(mapLayerId);
+      if (!layer) return;
+
+      if (layer.type === "raster") {
+        map.setPaintProperty(mapLayerId, "raster-opacity", opacity);
+      } else if (layer.type === "fill") {
+        map.setPaintProperty(mapLayerId, "fill-opacity", Math.min(0.22, opacity * 0.22));
+      } else if (layer.type === "line") {
+        map.setPaintProperty(mapLayerId, "line-opacity", opacity);
+      } else if (layer.type === "circle") {
+        map.setPaintProperty(mapLayerId, "circle-opacity", opacity);
+      }
+    });
   }
 
   function bindLayerPanel() {
