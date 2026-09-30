@@ -21,6 +21,26 @@ window.VIETFLEX_CONFIG = Object.freeze({
       opacity: 0.7,
       order: 1,
       attribution: "Vietflex Mapbasic"
+    }),
+
+    mapbasic3: Object.freeze({
+      label: "Mapbasic3 · Địa phận tỉnh 2025",
+      pmtilesObject: "VN_Dia_Phan_Tinh_2025.pmtiles",
+      sourceMbtilesObject: "VN_Dia_Phan_Tinh_2025.mbtiles",
+      visible: false,
+      opacity: 0.85,
+      order: 2,
+      attribution: "Vietflex Mapbasic3 · Địa phận tỉnh 2025"
+    }),
+
+    mapbasic4: Object.freeze({
+      label: "Mapbasic4 · Địa phận xã 2025",
+      pmtilesObject: "VN_Dia_Phan_Xa_2025.pmtiles",
+      sourceMbtilesObject: "VN_Dia_Phan_Xa_2025.mbtiles",
+      visible: false,
+      opacity: 0.9,
+      order: 3,
+      attribution: "Vietflex Mapbasic4 · Địa phận xã 2025"
     })
   }),
 
