@@ -1,17 +1,26 @@
 # Vietflex Basemap — mapbasic2
 
-WebGIS một khung bản đồ, quản lý hai PMTiles như các layer độc lập bằng MapLibre GL JS + PMTiles.
+WebGIS một khung bản đồ, quản lý các PMTiles như các layer độc lập bằng MapLibre GL JS + PMTiles.
 
 ## Storage hiện tại
 
-Cả hai PMTiles nằm chung bucket Cloudflare R2 `mapbasic2` và dùng cùng public endpoint:
+Các dữ liệu nằm chung bucket Cloudflare R2 `mapbasic2` và dùng cùng public endpoint:
 
 `https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev`
 
-Các object:
+Các object đang dùng trực tiếp trên WebGIS:
 
 - `basemap.pmtiles`
 - `vietnam_biendong_webgis.pmtiles`
+- `VN_Dia_Phan_Tinh_2025.pmtiles` — Mapbasic3
+- `VN_Dia_Phan_Xa_2025.pmtiles` — Mapbasic4
+
+Hai object nguồn MBTiles:
+
+- `VN_Dia_Phan_Tinh_2025.mbtiles`
+- `VN_Dia_Phan_Xa_2025.mbtiles`
+
+> Mã ứng dụng hiện tại được giữ nguyên theo pipeline PMTiles v3. Vì MBTiles là SQLite, trình duyệt không đọc trực tiếp hai file `.mbtiles` bằng `pmtiles.Protocol`. Hai file nguồn cần được chuyển 1–1 sang PMTiles trước khi bật Mapbasic3/Mapbasic4.
 
 ## Các layer
 
@@ -26,15 +35,50 @@ Các object:
 - Opacity mặc định: 70%
 - Khi bật, layer được tải theo yêu cầu
 
+### Mapbasic3 · Địa phận tỉnh 2025
+- Nguồn: `VN_Dia_Phan_Tinh_2025.mbtiles`
+- Object WebGIS: `VN_Dia_Phan_Tinh_2025.pmtiles`
+- Mặc định: tắt
+- Opacity mặc định: 85%
+- Khi bật, layer được tải theo yêu cầu
+
+### Mapbasic4 · Địa phận xã 2025
+- Nguồn: `VN_Dia_Phan_Xa_2025.mbtiles`
+- Object WebGIS: `VN_Dia_Phan_Xa_2025.pmtiles`
+- Mặc định: tắt
+- Opacity mặc định: 90%
+- Khi bật, layer được tải theo yêu cầu
+
+## Chuyển MBTiles → PMTiles
+
+Dùng PMTiles CLI:
+
+```bash
+pmtiles convert VN_Dia_Phan_Tinh_2025.mbtiles VN_Dia_Phan_Tinh_2025.pmtiles
+pmtiles convert VN_Dia_Phan_Xa_2025.mbtiles VN_Dia_Phan_Xa_2025.pmtiles
+```
+
+Kiểm tra trước khi upload lại R2:
+
+```bash
+pmtiles show VN_Dia_Phan_Tinh_2025.pmtiles
+pmtiles verify VN_Dia_Phan_Tinh_2025.pmtiles
+
+pmtiles show VN_Dia_Phan_Xa_2025.pmtiles
+pmtiles verify VN_Dia_Phan_Xa_2025.pmtiles
+```
+
+Sau đó upload hai file PMTiles vào cùng bucket `mapbasic2` với đúng tên object ở trên. Không xóa hai MBTiles nguồn nếu vẫn cần lưu bản gốc.
+
 ## Cache/version
 
-Vì hai PMTiles đã được cập nhật nhưng vẫn giữ nguyên tên object, `config.js` dùng:
+Vì các PMTiles cũ đã được cập nhật nhưng vẫn giữ nguyên tên object, `config.js` dùng:
 
 `dataVersion: "2026-09-28-2"`
 
 Ứng dụng thêm query version vào URL PMTiles để trình duyệt không trộn byte-range cache của phiên bản cũ với phiên bản mới.
 
-Khi thay PMTiles lần sau nhưng vẫn giữ nguyên tên file, chỉ cần tăng `dataVersion`.
+Khi thay nội dung một PMTiles nhưng vẫn giữ nguyên tên file, tăng `dataVersion`.
 
 ## CORS
 
