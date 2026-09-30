@@ -1,7 +1,7 @@
 window.VIETFLEX_CONFIG = Object.freeze({
   storage: Object.freeze({
     r2BaseUrl: "https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev",
-    dataVersion: "2026-09-28-2"
+    dataVersion: "2026-09-30-1"
   }),
 
   layers: Object.freeze({
