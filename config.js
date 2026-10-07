@@ -1,7 +1,7 @@
 window.VIETFLEX_CONFIG = Object.freeze({
   storage: Object.freeze({
     r2BaseUrl: "https://pub-c4fd9d1f887041be97a2542a7664ff95.r2.dev",
-    dataVersion: "2026-10-07-1"
+    dataVersion: "2026-10-07-2"
   }),
 
   layers: Object.freeze({
@@ -45,13 +45,11 @@ window.VIETFLEX_CONFIG = Object.freeze({
 
     mapbasic5: Object.freeze({
       label: "Mapbasic5 · Vùng biển",
-      sourceKind: "geojson",
-      dataObject: "mapbasic5.geojson",
-      pmtilesObject: "VN_Vung_Bien_Phap_Ly_2026.pmtiles",
+      pmtilesObject: "VN_Vung_Bien_Dong_2026.pmtiles",
       visible: true,
       opacity: 0.9,
       order: 4,
-      attribution: "Vietflex Mapbasic5 · Vùng biển"
+      attribution: "Vietflex Mapbasic5 · Vùng biển Đông 2026"
     })
   }),
 
