@@ -19,6 +19,16 @@
     return url.href;
   }
 
+  function dataUrl(layer) {
+    const url = new URL(layer.dataObject, window.location.href);
+
+    if (cfg.storage.dataVersion) {
+      url.searchParams.set("v", cfg.storage.dataVersion);
+    }
+
+    return url.href;
+  }
+
   function withTimeout(promise, ms, label) {
     let timer;
 
@@ -270,6 +280,107 @@
     return mapLayerIds;
   }
 
+  function addGeojsonLayer(id, def, url) {
+    const beforeId = findBeforeLayer(def.order);
+    const mapLayerIds = [];
+    const visibility = def.visible ? "visible" : "none";
+
+    if (!map.getSource(sourceId(id))) {
+      map.addSource(sourceId(id), {
+        type: "geojson",
+        data: url,
+        attribution: def.attribution || def.label
+      });
+    }
+
+    const fillId = `${layerId(id)}-fill`;
+    const lineId = `${layerId(id)}-line`;
+    const pointId = `${layerId(id)}-point`;
+
+    if (!map.getLayer(fillId)) {
+      map.addLayer({
+        id: fillId,
+        type: "fill",
+        source: sourceId(id),
+        filter: ["==", ["geometry-type"], "Polygon"],
+        layout: { visibility },
+        paint: {
+          "fill-color": [
+            "match", ["get", "layer"],
+            "lanh_hai_12nm", "#2878b5",
+            "tiep_giap_lanh_hai", "#4aa3df",
+            "eez_reference_band", "#2ca58d",
+            "them_luc_dia_200nm_tham_khao", "#8e63b0",
+            "vung_ngoai_200nm_tham_khao", "#8c969d",
+            "#5b8db8"
+          ],
+          "fill-opacity": [
+            "match", ["get", "layer"],
+            "lanh_hai_12nm", 0.25,
+            "tiep_giap_lanh_hai", 0.18,
+            "eez_reference_band", 0.12,
+            "them_luc_dia_200nm_tham_khao", 0.07,
+            "vung_ngoai_200nm_tham_khao", 0.035,
+            0.12
+          ]
+        }
+      }, beforeId);
+    }
+
+    if (!map.getLayer(lineId)) {
+      map.addLayer({
+        id: lineId,
+        type: "line",
+        source: sourceId(id),
+        layout: { visibility },
+        paint: {
+          "line-color": [
+            "match", ["get", "layer"],
+            "duong_co_so", "#e31a1c",
+            "lanh_hai_12nm", "#1f5f99",
+            "tiep_giap_lanh_hai", "#247eb5",
+            "eez_reference_band", "#13866f",
+            "gioi_han_200nm_ky_thuat", "#8b2fb3",
+            "them_luc_dia_200nm_tham_khao", "#674087",
+            "vung_ngoai_200nm_tham_khao", "#667078",
+            "phan_dinh_vinh_bac_bo_2000", "#111111",
+            "ranh_ngoai_lanh_hai_bac_luan_2025", "#7a0000",
+            "#315f80"
+          ],
+          "line-width": [
+            "match", ["get", "layer"],
+            "duong_co_so", 2.6,
+            "phan_dinh_vinh_bac_bo_2000", 2.8,
+            "ranh_ngoai_lanh_hai_bac_luan_2025", 2.6,
+            "gioi_han_200nm_ky_thuat", 2.0,
+            1.3
+          ],
+          "line-opacity": def.opacity ?? 0.9
+        }
+      }, beforeId);
+    }
+
+    if (!map.getLayer(pointId)) {
+      map.addLayer({
+        id: pointId,
+        type: "circle",
+        source: sourceId(id),
+        filter: ["==", ["geometry-type"], "Point"],
+        layout: { visibility },
+        paint: {
+          "circle-color": "#e31a1c",
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 2.5, 8, 4.5, 12, 6],
+          "circle-opacity": def.opacity ?? 0.9,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.2
+        }
+      }, beforeId);
+    }
+
+    mapLayerIds.push(fillId, lineId, pointId);
+    return mapLayerIds;
+  }
+
   async function ensureLayer(id) {
     if (runtime.has(id)) return runtime.get(id);
 
@@ -280,6 +391,23 @@
     setControlsDisabled(id, true);
 
     try {
+      if (def.sourceKind === "geojson") {
+        const url = dataUrl(def);
+        const mapLayerIds = addGeojsonLayer(id, def, url);
+        const entry = {
+          id,
+          def,
+          url,
+          sourceType: "geojson",
+          mapLayerIds
+        };
+
+        runtime.set(id, entry);
+        setStatus(id, "ready", "Sẵn sàng · GeoJSON · Vùng biển");
+        setControlsDisabled(id, false);
+        return entry;
+      }
+
       const url = archiveUrl(def);
       const archive = new pmtiles.PMTiles(url);
 
