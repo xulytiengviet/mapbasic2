@@ -14,6 +14,7 @@ Các object đang dùng trực tiếp trên WebGIS:
 - `vietnam_biendong_webgis.pmtiles`
 - `VN_Dia_Phan_Tinh_2025.pmtiles` — Mapbasic3
 - `VN_Dia_Phan_Xa_2025.pmtiles` — Mapbasic4
+- `VN_Vung_Bien_Dong_2026.pmtiles` — Mapbasic5 · Vùng biển
 
 Hai object nguồn MBTiles:
 
@@ -49,6 +50,14 @@ Hai object nguồn MBTiles:
 - Opacity mặc định: 90%
 - Khi bật, layer được tải theo yêu cầu
 
+### Mapbasic5 · Vùng biển
+- Object WebGIS: `VN_Vung_Bien_Dong_2026.pmtiles`
+- PMTiles v3, raster PNG nền trong suốt
+- Zoom: Z3–Z10
+- Mặc định: bật
+- Opacity mặc định: 90%
+- Chồng trực tiếp lên Mapbasic2
+
 ## Chuyển MBTiles → PMTiles
 
 Dùng PMTiles CLI:
@@ -74,7 +83,7 @@ Sau đó upload hai file PMTiles vào cùng bucket `mapbasic2` với đúng tên
 
 Vì các PMTiles cũ đã được cập nhật nhưng vẫn giữ nguyên tên object, `config.js` dùng:
 
-`dataVersion: "2026-09-28-2"`
+`dataVersion: "2026-10-07-2"`
 
 Ứng dụng thêm query version vào URL PMTiles để trình duyệt không trộn byte-range cache của phiên bản cũ với phiên bản mới.
 
